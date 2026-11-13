@@ -4,7 +4,9 @@
 
 Turn raw tensile test files into a results table, an Excel file and a thesis-ready figure, without writing any code.
 
-## Install Python and libraries: First time only 
+---
+
+## Install Python and libraries: first time only
 
 1. Install **Python** from python.org. During installation, tick **"Add Python to PATH"**.
 2. Install **VS Code** from code.visualstudio.com, then add its **Python** extension.
@@ -14,40 +16,49 @@ Turn raw tensile test files into a results table, an Excel file and a thesis-rea
    pip install numpy pandas matplotlib openpyxl
    ```
 
+---
+
 ## Every time you need to use your data
-# Instructions to use the toolkit
+
+### Instructions to use the toolkit
+
 1. **Copy your test files** into the `my_data` folder.
 2. **Fill in `my_data/specimens.xlsx`**: the Instructions tab explains everything; type one row per test file in the Specimens tab.
-3. In VS Code, 
-   **File → Open Folder → DataMechanic_Tensile_Toolkit**, then open **`run_analysis.py`**.
+3. In VS Code, **File → Open Folder → DataMechanic_Tensile_Toolkit**, then open **`run_analysis.py`**.
 4. In the file, change `DATA_FOLDER = "example_data"` to `DATA_FOLDER = "my_data"`.
-5. Press **Run** icon (▶ at the top right).
+5. Press the **Run** icon (▶ at the top right).
 6. Once the run is successful, results are stored in the **`output`** folder.
 7. Open the **`output`** folder to see: `results.xlsx`, `results.csv`, `summary.csv` and `stress_strain.png`.
+
+### Test the toolkit
+
+To try the toolkit first, skip steps 1, 2 and 4: it runs on the example data as it is.
+
+---
 
 ## Filling in specimens.xlsx
 
 Every data folder has its own `specimens.xlsx`, describing only the files in that folder. The testing machine doesn't create it; you fill it in. Keep the file name and don't rename the Specimens tab.
 
-| Column                | What to enter |
+Check the **Instructions** sheet in the specimens.xlsx file.
 
-# Test the toolkit 
-To try the toolkit first, skip steps 1, 2 and 4: it runs on the example data as it is.
-
-# Check the "instructions" sheet in the specimens.xlsx file
-| file                  | Exact file name, including `.csv` |
-| specimen_id            | A short name, e.g. S1 |
+| Column | What to enter |
+|---|---|
+| file | Exact file name, including `.csv` |
+| specimen_id | A short name, e.g. S1 |
 | width_mm, thickness_mm | Measured specimen dimensions in mm |
-| gauge_length_mm        | Extensometer gauge length in mm |
-| strain_source          | `extensometer` (recommended) or `crosshead` from the dropdown |
-| material               | Any description |
+| gauge_length_mm | Extensometer gauge length in mm |
+| strain_source | `extensometer` (recommended) or `crosshead` from the dropdown |
+| material | Any description |
 
-### Your test files
+---
+
+## Your test files
 
 Each test must be a **CSV file** (comma-separated). The toolkit was written for Instron Bluehill exports, but works with any machine whose file has the following details:
 
 | Column | Name must contain | Units it understands |
-
+|---|---|---|
 | Time | `Time` | s, min |
 | Force | `Load` or `Force` | N, kN, lbf |
 | Crosshead movement | `Extension`, `Displacement` or `Crosshead` | mm, in |
@@ -63,7 +74,10 @@ Units can be in a separate row below the column names, e.g. `(s)`, `(N)`, `(mm)`
 4. **Check decimal points.** Numbers must use a full stop as the decimal mark (`12.5`, not `12,5`). Some European software uses commas; change the export setting or the Excel region setting.
 5. **Run again.** If something is still wrong, the toolkit stops and tells you which file and what it couldn't find.
 
-**Still stuck?** Share the first 20 lines of your file (remove any private details) in the comments or on GitHub, and support for that machine can be added.
+> [!TIP]
+> **Still stuck?** Share the first 20 lines of your file (remove any private details) in the comments or on GitHub, and support for that machine can be added.
+
+---
 
 ## What you get
 
@@ -76,45 +90,85 @@ Units can be in a separate row below the column names, e.g. `(s)`, `(N)`, `(mm)`
 
 The summary gives mean ± SD, rounded for reporting (e.g. 275 ± 2 MPa).
 
+---
+
 ## Changing the figure
 
 All figure settings are in `run_analysis.py` under **FIGURE SETTINGS**, each with a note: title, labels, font size, legend position, colours, line thickness, grid, axis range, size, file name (`.png` or `.pdf`) and resolution. Change, save, and press Run again.
 
-# Warnings and What to do !
+---
 
-**Strain from crosshead** 
-| Strain was calculated from machine movement, not measured on the specimen. Common when a lab has no extensometer.Nothing to inspect: it applies to every crosshead test.UTS is independent of the strain measurement method, provided force and specimen dimensions are measured correctly. Proof stress may be affected by the strain measurement method. Modulus and strain-derived ductility measurements from crosshead data should not be treated as reliable material properties without appropriate calibration.|
-   **Reliable:** UTS. 
-   **Approximate:** proof stress. 
-   **Not reliable:** modulus and strains, so don't report them.For ductility, measure elongation after fracture from gauge marks on the broken specimen.
-
-| **Elastic part not very straight** 
-| The points used to calculate the modulus don't lie on a straight line, so E is uncertain. | 
-*Zoom into the start of the curve (set `X_LIMITS = (0, 1)`).* 
--Look for :
-• a step or kink: the specimen slipped in the grips
-• a slowly curving start: specimen seating or a slightly bent specimen
-• scattered points: noisy data | Check the specimen dimensions and strain source in the sheet.If one specimen slipped, don't report its modulus, but its strength values can still be used.For future tests: check alignment and grip pressure, and apply a small preload.Don't change the fitting range just to remove the warning. |
-
-**Maximum stress looks like a spike** 
-| The highest stress is a single reading clearly above the readings around it, rather than a smooth peak. | Zoom into the peak of the curve. 
-• A single point sticking up above a smooth curve is usually an electrical or data glitch. A smooth, rounded peak is real. | If it's a glitch: make a copy of the raw file, delete that one reading in the copy, note it in your records, and run again. Keep the original file unchanged.
-• If the peak is smooth: the warning can be ignored.Never delete readings just because a value seems too high.
-
-**No sudden load drop found**
- | The curve ends without the sharp drop that normally marks fracture. | 
- • Check the broken specimen and the test record. Did the specimen actually break? Did the machine stop early because of an end-of-test setting? Was the file cut short when exported? 
- •  If the specimen broke but recording stopped just before: UTS and proof stress are fine, but don't report strain at fracture.
- • If it didn't break: report it as "test stopped before fracture".For future tests: check the machine's end-of-test settings. 
-
-**Only a few readings in the elastic fit**
- | Fewer than 20 data points fall in the straight part of the curve, so the modulus is less precise. |
- •  Look at how sparse the points are at the start of the curve.The results can still be used, but treat the modulus with caution.For future tests: increase the data recording rate in the test method.
+## Warnings and what to do
 
 If something is missing (a folder, a file, a column), the toolkit stops and tells you exactly what to fix.
 
+### ⚠️ Strain from crosshead
+
+**What it means:** Strain was calculated from machine movement, not measured on the specimen. Common when a lab has no extensometer.
+
+**What to look for:** Nothing to inspect: it applies to every crosshead test.
+
+UTS is independent of the strain measurement method, provided force and specimen dimensions are measured correctly. Proof stress may be affected by the strain measurement method. Modulus and strain-derived ductility measurements from crosshead data should not be treated as reliable material properties without appropriate calibration.
+
+**What to do:**
+- **Reliable:** UTS.
+- **Approximate:** proof stress.
+- **Not reliable:** modulus and strains, so don't report them.
+- For ductility, measure elongation after fracture from gauge marks on the broken specimen.
+
+### ⚠️ Elastic part not very straight
+
+**What it means:** The points used to calculate the modulus don't lie on a straight line, so E is uncertain.
+
+**What to look for:** Zoom into the start of the curve (set `X_LIMITS = (0, 1)`). Look for:
+- a step or kink: the specimen slipped in the grips
+- a slowly curving start: specimen seating or a slightly bent specimen
+- scattered points: noisy data
+
+**What to do:**
+- Check the specimen dimensions and strain source in the sheet.
+- If one specimen slipped, don't report its modulus, but its strength values can still be used.
+- For future tests: check alignment and grip pressure, and apply a small preload.
+- Don't change the fitting range just to remove the warning.
+
+### ⚠️ Maximum stress looks like a spike
+
+**What it means:** The highest stress is a single reading clearly above the readings around it, rather than a smooth peak.
+
+**What to look for:** Zoom into the peak of the curve. A single point sticking up above a smooth curve is usually an electrical or data glitch. A smooth, rounded peak is real.
+
+**What to do:**
+- If it's a glitch: make a copy of the raw file, delete that one reading in the copy, note it in your records, and run again. Keep the original file unchanged.
+- If the peak is smooth: the warning can be ignored.
+- Never delete readings just because a value seems too high.
+
+### ⚠️ No sudden load drop found
+
+**What it means:** The curve ends without the sharp drop that normally marks fracture.
+
+**What to look for:** Check the broken specimen and the test record. Did the specimen actually break? Did the machine stop early because of an end-of-test setting? Was the file cut short when exported?
+
+**What to do:**
+- If the specimen broke but recording stopped just before: UTS and proof stress are fine, but don't report strain at fracture.
+- If it didn't break: report it as "test stopped before fracture".
+- For future tests: check the machine's end-of-test settings.
+
+### ⚠️ Only a few readings in the elastic fit
+
+**What it means:** Fewer than 20 data points fall in the straight part of the curve, so the modulus is less precise.
+
+**What to look for:** Look at how sparse the points are at the start of the curve.
+
+**What to do:**
+- The results can still be used, but treat the modulus with caution.
+- For future tests: increase the data recording rate in the test method.
+
+---
+
 ## Good to know
 
-- The example data is **simulated** and labelled as such. **It is not from a real test.**
+> [!NOTE]
+> The example data is **simulated** and labelled as such. **It is not from a real test.**
+
 - You will never need to open `tensile_engine.py`. It contains the analysis, with comments for anyone curious.
 - Licence: MIT (free to use and share; keep the copyright notice).
