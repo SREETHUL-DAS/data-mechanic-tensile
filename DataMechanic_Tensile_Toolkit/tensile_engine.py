@@ -273,8 +273,8 @@ def analyse_folder(data_folder, strain_source="sheet"):
     n = len(table)
     summary = pd.DataFrame({
         "property": [REPORT[c][0] for c in REPORT],
-        "mean": [table[c].mean() for c in REPORT],
-        "SD": [table[c].std(ddof=1) if n > 1 else np.nan for c in REPORT],
+        "mean": [round(table[c].mean(), d) for c, (_, d) in REPORT.items()],
+        "SD": [round(table[c].std(ddof=1), d) if n > 1 else np.nan for c, (_, d) in REPORT.items()],
         "report_as": [f"{table[c].mean():.{d}f} ± {table[c].std(ddof=1):.{d}f}" if n > 1
                       else f"{table[c].mean():.{d}f}" for c, (_, d) in REPORT.items()],
     })
@@ -306,7 +306,128 @@ def make_figure(curves, path, s, simulated):
                 ha="right", va="top", fontsize=6, color="0.4")
     fig.tight_layout()
     fig.savefig(path, dpi=s["DPI"])
+    png = io.BytesIO()
+    fig.savefig(png, format="png", dpi=200)  # copy for the Excel summary
     plt.close(fig)
+    png.seek(0)
+    return png
+
+
+def write_excel(path, table, summary, figure_png, data_folder, simulated):
+    """Formatted results.xlsx: Summary sheet (with the figure) + Specimens sheet."""
+    from datetime import date
+
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    navy, grey = "1F4E79", "595959"
+    head_fill = PatternFill("solid", fgColor=navy)
+    band = PatternFill("solid", fgColor="F2F2F2")
+    thin = Side(style="thin", color="BFBFBF")
+    box = Border(left=thin, right=thin, top=thin, bottom=thin)
+    F = "Arial"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Summary"
+    ws.sheet_view.showGridLines = False
+    for col, w in zip("ABCDE", (3, 44, 12, 10, 16)):
+        ws.column_dimensions[col].width = w
+
+    ws["B2"] = "Data Mechanic – Tensile test results"
+    ws["B2"].font = Font(name=F, size=16, bold=True, color=navy)
+    ws["B3"] = (f"Data folder: {data_folder.name}   ·   n = {len(table)} specimens   ·   "
+                f"Strain source: {', '.join(sorted(table['strain_source'].unique()))}   ·   "
+                f"Analysed: {date.today():%d %b %Y}")
+    ws["B3"].font = Font(name=F, size=9, color=grey)
+    if simulated:
+        ws["B4"] = "SIMULATED DATA – not from a real test"
+        ws["B4"].font = Font(name=F, size=9, bold=True, color="C00000")
+
+    top = 6
+    for j, h in enumerate(["Property", "Mean", "SD", "Report as"], start=2):
+        c = ws.cell(row=top, column=j, value=h)
+        c.font = Font(name=F, bold=True, color="FFFFFF")
+        c.fill = head_fill
+        c.border = box
+        c.alignment = Alignment(horizontal="left" if j == 2 else "center")
+    for i, ((_, (_, d)), (_, r)) in enumerate(zip(REPORT.items(), summary.iterrows())):
+        row = top + 1 + i
+        fmt = "0" if d == 0 else "0." + "0" * d
+        values = [r["property"], r["mean"], r["SD"], r["report_as"]]
+        for j, v in enumerate(values, start=2):
+            c = ws.cell(row=row, column=j, value=None if pd.isna(v) else v)
+            c.font = Font(name=F, bold=(j == 5))
+            c.border = box
+            if i % 2:
+                c.fill = band
+            if j in (3, 4):
+                c.number_format = fmt
+            c.alignment = Alignment(horizontal="left" if j == 2 else "center")
+
+    row = top + len(REPORT) + 2
+    n_warn = int((table["warnings"] != "").sum())
+    ws.cell(row=row, column=2,
+            value="No warnings." if n_warn == 0 else
+            f"{n_warn} specimen(s) have warnings – see the Specimens sheet.").font = Font(
+        name=F, bold=True, color="375623" if n_warn == 0 else "C00000")
+    notes = [
+        "Mean ± standard deviation of all specimens.",
+        f"Modulus: straight-line fit between {int(FIT_WINDOW[0]*100)} % and "
+        f"{int(FIT_WINDOW[1]*100)} % of the maximum stress (toolkit default).",
+        "Proof stress: 0.2 % offset method.  UTS: highest measured engineering stress.",
+        "Plastic strain at fracture is taken from the curve. It is not 'elongation after "
+        "fracture', which is measured on the broken specimen.",
+    ]
+    for k, t in enumerate(notes):
+        c = ws.cell(row=row + 2 + k, column=2, value=t)
+        c.font = Font(name=F, size=9, color=grey)
+
+    img = XLImage(figure_png)
+    scale = 520 / img.width
+    img.width, img.height = 520, int(img.height * scale)
+    ws.add_image(img, "G2")
+    ws.page_setup.orientation = "landscape"  # prints on one page
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 1
+
+    # Specimens sheet
+    sp = wb.create_sheet("Specimens")
+    sp.freeze_panes = "A2"
+    labels = {"specimen": "Specimen", "strain_source": "Strain source", "E_GPa": "E (GPa)",
+              "Rp02_MPa": "Rp0.2 (MPa)", "UTS_MPa": "UTS (MPa)",
+              "uniform_strain_%": "Uniform strain (%)", "strain_at_fracture_%": "Strain at fracture (%)",
+              "plastic_strain_at_fracture_%": "Plastic strain at fracture (%)",
+              "E_fit_points": "E fit points", "E_fit_R2": "E fit R²", "warnings": "Warnings"}
+    formats = {"E_GPa": "0.00", "Rp02_MPa": "0.0", "UTS_MPa": "0.0", "uniform_strain_%": "0.00",
+               "strain_at_fracture_%": "0.00", "plastic_strain_at_fracture_%": "0.00",
+               "E_fit_points": "0", "E_fit_R2": "0.0000"}
+    cols = list(table.columns)
+    for j, col in enumerate(cols, start=1):
+        c = sp.cell(row=1, column=j, value=labels.get(col, col))
+        c.font = Font(name=F, bold=True, color="FFFFFF")
+        c.fill = head_fill
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = box
+        sp.column_dimensions[c.column_letter].width = 60 if col == "warnings" else 14
+    sp.row_dimensions[1].height = 32
+    for i, (_, r) in enumerate(table.iterrows(), start=2):
+        for j, col in enumerate(cols, start=1):
+            v = r[col]
+            c = sp.cell(row=i, column=j, value=None if (not isinstance(v, str) and pd.isna(v)) else v)
+            c.font = Font(name=F)
+            c.border = box
+            if col in formats:
+                c.number_format = formats[col]
+            c.alignment = Alignment(horizontal="left" if col == "warnings" else "center",
+                                    vertical="top", wrap_text=(col == "warnings"))
+            if i % 2 == 1:
+                c.fill = band
+    sp.page_setup.orientation = "landscape"
+    sp.sheet_properties.pageSetUpPr.fitToPage = True
+    sp.page_setup.fitToWidth, sp.page_setup.fitToHeight = 1, 0
+    wb.save(path)
 
 
 def run(settings):
@@ -334,18 +455,18 @@ def run(settings):
         for _, w in warn.iterrows():
             print(f"  {w['specimen']}: {w['warnings']}")
 
+    table = table.round({"E_GPa": 2, "Rp02_MPa": 1, "UTS_MPa": 1, "uniform_strain_%": 2,
+                         "strain_at_fracture_%": 2, "plastic_strain_at_fracture_%": 2, "E_fit_R2": 4})
     table.to_csv(out / "results.csv", index=False, encoding="utf-8-sig")
     summary.to_csv(out / "summary.csv", index=False, encoding="utf-8-sig")
     saved = ["results.csv", "summary.csv"]
+    figure_png = make_figure(curves, out / settings["FIGURE_FILE"], settings, simulated)
+    saved.append(settings["FIGURE_FILE"])
     try:
-        with pd.ExcelWriter(out / "results.xlsx") as xw:
-            summary.to_excel(xw, sheet_name="Summary", index=False)
-            table.to_excel(xw, sheet_name="Specimens", index=False)
+        write_excel(out / "results.xlsx", table, summary, figure_png, data_folder, simulated)
         saved.append("results.xlsx")
     except ImportError:
         print("\n(Excel file skipped: run  pip install openpyxl  once to enable it.)")
     except PermissionError:
         print("\n(Excel file not saved: close results.xlsx in Excel and run again.)")
-    make_figure(curves, out / settings["FIGURE_FILE"], settings, simulated)
-    saved.append(settings["FIGURE_FILE"])
     print(f"\nSaved {', '.join(saved)} in:\n  {out}")
